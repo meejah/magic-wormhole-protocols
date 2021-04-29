@@ -70,28 +70,72 @@ messages. Clients must ignore unrecognized message types from the Server.
 
 ## Connection-Specific (Client-to-Server) Messages
 
-The first thing each client sends to the server, immediately after the
-WebSocket connection is established, is a `bind` message. This specifies the
+The first thing the server sends to each client is the `welcome` message.
+This is intended to deliver important status information to the client that
+might influence its operation. Clients should look out for the following fields,
+and handle them accordingly, if present:
+
+* `current_cli_version`: *(deprecated)* prompts the user to upgrade if the server's
+  advertised version is greater than the client's version (as derived from
+  the git tag)
+* `motd`: This message is intended to inform users about
+  performance problems, scheduled downtime, or to beg for donations to keep
+  the server running. Clients should print it or otherwise display prominently
+  to the user.
+* `error`: The client should show this message to the user and then terminate. If a
+  future version of the protocol requires a rate-limiting CAPTCHA ticket or
+  other authorization record, the server can send `error` (explaining the
+  requirement) if it does not see this ticket arrive before the `bind`.
+* `relays`: An advertizement list of relay servers. It is a JSON list of which each
+  entry may look like this:
+    ```json
+    {
+      "url": "tcp:myrelay.example.org:12345",
+      "country": "Italy",
+      "continent": "EU",
+    }
+    ```
+  The only mandatory key is `url`, al others are optional information to help the client
+  choose an appropriate one. Further keys may be added in the future. Clients must not
+  expect the protocol to be `tcp` (expect websockets support in the future). Clients
+  should make a preselection of viable relay servers (which may include entries from other
+  sources as well), and randomly select one or two.
+* `proof_of_work`: A proof of work task to mitigate DOS attacks. The difficulty is dictated
+  by the server based on its current load. The entry looks like this:
+    ```json
+    {
+      "challenge": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABXXXX",
+      "sha256": "a66cdd7def34cb0267b83d21c37c429af0a15dcd00465da22402dab9f1cbf10e",
+      "mac": "<snip>"
+    }
+    ```
+  The challenge contains exactly 32 hex-encoded bytes, of which the last nibbles are censored ('X'),
+  and the `sha256sum` of the uncensored challenge. The goal is to find the complete `challenge` with
+  the given hash.
+
+The first thing each client sends to the server, immediately after receiving
+the welcome message, is a `bind` message. This specifies the
 AppID and side (in keys `appid` and `side`, respectively) that all subsequent
 messages will be scoped to. While technically each message could be
 independent (with its own `appid` and `side`), I thought it would be less
 confusing to use exactly one WebSocket per logical wormhole connection.
 
-The first thing the server sends to each client is the `welcome` message.
-This is intended to deliver important status information to the client that
-might influence its operation. The Python client currently reacts to the
-following keys (and ignores all others):
+Due to backwards compatibity, clients are not forced to give a proof of work.
+However, it is strongly recommended. Here's how a full "bind" message may look like:
 
-* `current_cli_version`: prompts the user to upgrade if the server's
-  advertised version is greater than the client's version (as derived from
-  the git tag)
-* `motd`: prints this message, if present; intended to inform users about
-  performance problems, scheduled downtime, or to beg for donations to keep
-  the server running
-* `error`: causes the client to print the message and then terminate. If a
-  future version of the protocol requires a rate-limiting CAPTCHA ticket or
-  other authorization record, the server can send `error` (explaining the
-  requirement) if it does not see this ticket arrive before the `bind`.
+```json
+{
+  "type": "bind",
+  "appid": "lothar.com/wormhole/text-or-file-xfer",
+  "side": "123456",
+  "proof_of_work": {
+    "challenge": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABXXXX",
+    "sha256": "a66cdd7def34cb0267b83d21c37c429af0a15dcd00465da22402dab9f1cbf10e",
+    "mac": "<snip>",
+    "response": "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+  },
+}
+```
 
 A `ping` will provoke a `pong`: these are only used by unit tests for
 synchronization purposes (to detect when a batch of messages have been fully
@@ -201,7 +245,7 @@ This lists all message types, along with the type-specific keys for each (if
 any), and which ones provoke direct responses:
 
 * S->C welcome {welcome:}
-* (C->S) bind {appid:, side:}
+* (C->S) bind {appid:, side:, proof_of_work: {..},}
 * (C->S) list {} -> nameplates
 * S->C nameplates {nameplates: [{id: str},..]}
 * (C->S) allocate {} -> allocated

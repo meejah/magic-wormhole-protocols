@@ -100,3 +100,44 @@ will be released, and the WebSocket connection will be dropped.
 
 Now the client connection is fully set up, and the application specific messages
 (those with numeric phases) may be exchanged.
+
+## Wormhole Seeds
+
+Once to clients ever connected to each other, they now have a shared secret. This can
+be used to establish a new Wormhole connection without involving human entering codes.
+The code to be used can be derived from the previous session's key. No nameplate is needed,
+both sides can simply claim and connect to the same mailbox as last time. Some additional
+data needs to be exchanged and stored in order to allow for a good user experience.
+
+Cryptographically, this is pretty streightforward. If two seeds-enabled clients connect
+to each other, they may find each other again at `mailbox' = sha256(mailbox)`, using
+`code = hex(derive(key, "wormhole:seed"))` as "code". Instead of using nameplates in the
+client-server protocol, they can directly `open` the mailbox and start the client to client
+protocol as usual.
+
+Clients that want to support session resumption declare their abilitiy using the `seeds-v1`
+value during the `versions` phase. Additionally, they add a `seed` key that looks like this to
+their versions message:
+
+```json
+{
+  "abilities": [ "seeds-v1" ],
+  "app_versions": {},
+  "seed": {
+    "uuid": <UUID-v4>,
+    "name": <string>,
+  },
+}
+```
+
+Wormhole seeds are used by the user saying "I want to connect to this session", instead of "I
+want to connect to this code". Thus, there needs to be a mapping for the user to tell which
+session to resume. For this reason, every client generates a random, persistent
+[UUID](https://en.wikipedia.org/wiki/Universally_unique_identifier). Every time two clients
+connect, they update the seed accordingly. The UUIDs can be used to deduplicate sessions.
+Additionally, the optional `name` attribute may help giving human-readable names to sessions.
+A good default would be the user's name. But there must be a way to customize this, in the case
+a user has multiple devices and thus multiple sessions.
+
+Because UUIDs may change, sessions may die and some connections are oneshots. An expiry time of
+12 months is recommended. It is up to the clients if they want to make pairings explicit

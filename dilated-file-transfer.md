@@ -11,7 +11,7 @@ NOTE: there are several open questions / discussion points, some with correspond
 
 ## Overview and Features
 
-We describe a flexible, "session"-based approach to file transfer allowing either side to offer files to send while the other side may accept or reject each offer.
+We describe a flexible, session-based approach to file transfer allowing either side to offer files to send while the other side may accept or reject each offer.
 Either side MAY terminate the transfer session (by closing the wormhole)
 Either side MAY select a one-way version, similar to the classic protocol.
 
@@ -35,7 +35,7 @@ Clients supporting newer versions of file-transfer (i.e. the one in this documen
 
 In the mailbox protocol, applications can indicate version information.
 The existing file-transfer protocol doesn't use this so the version information is empty (indicating "classic").
-This protocol will include a dict like:
+This new Dilated File Transfer protocol will include a dict like:
 
 ```json
 {
@@ -102,8 +102,10 @@ These messages look like:
 ```python
 class Message:
     message: str     # unicode string
-    kind: int = 1    # "text message"
+    kind: "text"
 ```
+
+All control-channel messages MUST be msgpack-encoded and include at least a `"kind"` field.
 
 
 ### Making an Offer

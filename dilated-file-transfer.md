@@ -84,8 +84,7 @@ See the Dilation document for details on the Dilation setup procedure.
 Once a Dilation-supporting connection is open, we will have a "control" subchannel (subchannel #0).
 Either peer can also open additional subchannels.
 
-All control-channel messages are encoded using `msgpack`.
-   --> XXX: see "message encoding" discussion
+All control-channel messages are encoded using `msgpack` (rejected idea: JSON, because it lacks integers and binary types).
 
 Control-channel message formats are described using Python (and Haskell) pseudo-code to illustrate the exact data types involved.
 
@@ -259,15 +258,6 @@ Although releated, this is somewhat orthogonal to "versions".
 That is, a peer may _know how to parse_ some (newer) version of this protocol but may still wish to _not_ support (or use) a particular feature.
 
 
-* message encoding
-
-While `msgpack` is mentioned above, there are several other binary-supporting libraries worth considering.
-These are (in no particular order) at least: CBOR or flatbuffers or protocolbuffers or cap'n'proto
-
-We could also still decide to simply use JSON, as that is also unambiguous.
-Although it enjoys widespread support, JSON suffers from a lack of 64-bit integers (because JavaScript only supports 2^53 integers) and doesn't support a byte-string type (forcing e.g. any binary data to be encded in base64 or similar).
-
-preliminary conclusion: msgpack.
 
 
 * file naming

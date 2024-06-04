@@ -311,11 +311,11 @@ Let us suppose that at some point in the future we decide to add `thumbnail: byt
 It is reasonable to imagine that some clients may not make use of this feature at all (e.g. CLI programs) and so work and bandwidth can be saved by not producing and sending them.
 
 This becomes a new `"feature"` in the protocol.
-That is, the version information is upgraded to allow `"features": ["basic", "thumbnails"]`.
+That is, the version information is upgraded to allow `"features": ["core0", "thumbnails"]`.
 
 Peers that do not understand (or do not _want_) thumbnails do not include that in their `"features"` list.
 So, according to the protocol, these peers should never receive anything related to thumbnails.
-Only if both peers include `"features": ["basic", "thumbnails"]` will they receive thumbnail-related information.
+Only if both peers include `"features": ["core0", "thumbnails"]` will they receive thumbnail-related information.
 
 The thumbnail feature itself could be implemented by expanding the `Offer` message:
 
@@ -327,9 +327,9 @@ class Offer:
     thumbnail: bytes  # introduced in "thumbnail" feature; PNG data
 ```
 
-A new peer speaking to an old peer will never see `thumbnail` in the Offers, because the old peer sent `"formats": ["basic"]` so the new peer knows not to inclue that attribute (and the old peer won't ever send it).
+A new peer speaking to an old peer will never see `thumbnail` in the Offers, because the old peer sent `"formats": ["core0"]` so the new peer knows not to inclue that attribute (and the old peer won't ever send it).
 
-Two new peers speaking will both send `"formats": ["basic", "thumbnails"]` and so will both include (and know how to interpret) `"thumbnail"` attributes on `Offers`.
+Two new peers speaking will both send `"formats": ["core0", "thumbnails"]` and so will both include (and know how to interpret) `"thumbnail"` attributes on `Offers`.
 
 Additionally, a new peer that _doesn't want_ to see `"thumbnail"` data (e.g. it's a CLI client) can simply not include `"thumbnail"` in their `"formats"` list even if their protocol implementation knows about it.
 
@@ -394,7 +394,7 @@ Speaking this protocol, the `desktop` (receive-only CLI) peer sends version info
     "transfer": {
         "version": 1,
         "mode": "receive",
-        "features": ["basic"],
+        "features": ["core0"],
         "permission": "yes"
     }
 }

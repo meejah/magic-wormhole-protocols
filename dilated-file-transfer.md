@@ -41,16 +41,16 @@ This new Dilated File Transfer protocol will include a dict like:
 ```json
 {
     "transfer": {
-        "version": 1,
         "mode": "{send|receive|connect}",
-        "features": ["basic"],
+        "features": ["core0"],
         "permission": "{ask|yes}"
     }
 }
 ```
 
-The `version` key indicates the highest version of this Dilated File Transfer protocol that this peer understands.
-There is currently only one version: `1`.
+**Rejected idea**: having a `version` number that increases.
+Per RFC 9170, it can be the case that a protocol can "ossify" or lost its flexibility, including when using "highest common version" sorts of negotiation.
+Multiple extension points (e.g. both "version" and "features") can cause confusion; including both was rejected after considering the question, "when would `version` be incremented instead of using a `feature`?"
 
 The `mode` key indicates the desired mode of that peer.
 It has one of three values:
@@ -65,11 +65,12 @@ The `"features"` key is a list of message-formats / features understood by the p
 This allows for existing messages to be extended, or for new message types to be added.
 Peers MUST _accept_ messages for any features they support.
 Peers MUST only send messages for features in the other side's list.
-Only one format exists currently: `"basic"`.
+Only one format exists currently: `"core0"`.
+Peers MUST tolerate the existence of unknown values in the `"features"` list.
 
-   XXX:: maybe just lean on "version" for now?
+   (XXX might make the Python implementation randomly add an unknown one, 10% of the time?)
 
-See "Example of Protocol Expansion" below for discussion about adding new attributes (including when we might increment the `"version"` instead of adding a new `"feature"`).
+See "Example of Protocol Expansion" below for discussion about adding new attributes or capabilities or evolving existing ones.
 
 The `"permission"` key specifies how to proceed with offers.
 Using mode `ask` tells the sender to pause after transmitting the first metadata message and await an answer from the peer before streaming data.
@@ -86,13 +87,13 @@ Either peer can also open additional subchannels.
 All control-channel messages are encoded using `msgpack`.
    --> XXX: see "message encoding" discussion
 
-Control-channel message formats are described using Python pseudo-code to illustrate the exact data types involved.
+Control-channel message formats are described using Python (and Haskell) pseudo-code to illustrate the exact data types involved.
 
-All control-channel messages contain an integer "kind" field describing the type of message.
+All control-channel messages contain a "kind" field describing the type of message.
 
-Rejected idea: Version message, because we already do version negotiation via mailbox features.
+**Rejected idea**: Version message, because we already do version negotiation via mailbox features.
 
-Rejected idea: Offer/Answer messages via the control channel: we need to open a subchannel anyway; the subchannel-IDs are not intended to be part of the Dilation API.
+**Rejected idea**: Offer/Answer messages via the control channel: we need to open a subchannel anyway; and the subchannel-IDs are not intended to be part of the public Dilation API.
 
 
 ### Control Channel Messages
@@ -107,6 +108,7 @@ class Message:
 ```
 
 All control-channel messages MUST be msgpack-encoded and include at least a `"kind"` field.
+Future version (or extensions) of the protocol may add additional control-channel messages.
 
 
 ### Making an Offer
@@ -116,20 +118,22 @@ If the other peer specified `"mode": "send"` then this peer MUST NOT make any of
 
 To make an offer the peer opens a subchannel.
 Recall from the Dilation specification that subchannels are _record_ pipes (not simple byte-streams).
+That is, a subchannel transmits a series of complete (framed) messages (up to ~4GiB in size).
 
-All records on the subchannel are bytes, where the first byte indicates the kind of message and the remaining bytes are kind-dependant.
+For this protocol, each record on the subchannel uses the first byte to indicate the kind of message; the remaining bytes in any message are kind-dependant.
 
-The following kinds of messages exist(indicated by the first byte):
-* 1: msgpack-encoded `FileOffer` message
-* 2: msgpack-encoded `DirectoryOffer` message
-* 3: msgpack-encoded `OfferAccept` message
-* 4: msgpack-encoded `OfferReejct` message
-* 5: file data bytes
+The following kinds of messages exist (indicated by the first byte):
+* 0x00: reserved / unused
+* 0x01: msgpack-encoded `FileOffer` message
+* 0x02: msgpack-encoded `DirectoryOffer` message
+* 0x03: msgpack-encoded `OfferAccept` message
+* 0x04: msgpack-encoded `OfferReejct` message
+* 0x05: file data bytes
 
 All other byte values are reserved for future use and MUST NOT be used.
 XXX: maybe spec [0, 128) as reserved, and [128, 255) for "experiments"?
 
-The first message sent on the new subchannel is one of two offer messages.
+The first message sent on the new subchannel is either `FileOffer` or `DirectoryOffer`.
 
 To offer a single file (with message kind `1`):
 
@@ -143,12 +147,12 @@ class FileOffer:
 To offer a directory tree of many files (with message kind `2`):
 ```python
 class DirectoryOffer:
-    base: str          # unicode pathname of the root directory (i.e. what the user selected)
+    base: str          # unicode path segment of the root directory (i.e. what the user selected)
     size: int         # total number of bytes in _all_ files
     files: list[str]   # a list containing relative paths for each file
 ```
 
-The filenames in the `"files"` list are  unicode relative paths (relative to the `"base"` from the `DirectoryOffer` and NOT including that part.
+The filenames in the `"files"` list are unicode relative paths (relative to the `"base"` from the `DirectoryOffer` and NOT including that part.
 
 For example:
 
@@ -162,6 +166,26 @@ DirectoryOffer(
 ```
 
 This indicates an offer to send two files, one in `"project/README"` and the other in `"project/src/hello.py"`.
+A client can consider the "base" name as suggestion, of course.
+On the flip side, a privacy-conscious sending application could offer to randomize the name when sending.
+
+In Haskell, this might look like:
+
+```haskell
+import Path (Dir, File, Rel, Path)
+import Data.Time (UTCTime)
+import Numeric.Natural (Natural)
+
+data Offer
+  = FileOffer {
+      fname :: Path Rel File,
+      timestamp :: UTCTime,
+      size :: Natural }
+  | DirectoryOffer{
+      base :: Path Rel Dir,
+      total_size :: Natural,
+      files :: [Path Rel File] }
+```
 
 
 What happens next depends on the mode of the peer.
@@ -170,7 +194,9 @@ If the peer has `"mode": "yes"` then this peer MUST immediately start sending co
 
 If the peer has `"mode": "ask"` then this peer MUST NOT send any more messages and instead await an incoming message.
 
-That incoming message MUST be one of two reply messages: `OfferAccept` or `OfferReject`.
+Note that a UI treatment can still have a list with multiple offers in it; this protocol is spoken per-subchannel so another offer would be on a separate subchannel.
+
+In `"mode": "ask"`, the incoming message MUST be either `OfferAccept` or `OfferReject`.
 These are indicated by the kind byte of that message being `3` or `4` (see list above).
 
 ```python
@@ -185,8 +211,14 @@ class OfferAccept:
     pass
 ```
 
-When the offering side gets an `OfferReject` message, the subchannel SHOULD be immediately closed.
-The offering side MAY show the "reason" string to the user.
+Or in Haskell:
+
+```haskell
+data Answer = OfferAccept | OfferReject(Text)
+```
+
+When the offering side gets an `OfferReject` message, the subchannel MUST be immediately closed (by the offering side).
+The offering side SHOULD show the "reason" string to the user.
 
 When the offering side gets an `OfferAccept` message it begins streaming the file over the already-opened subchannel.
 When completed, the subchannel is closed.
@@ -197,9 +229,11 @@ Messages of kind `5` ("file data bytes") consist solely of file data.
 A single data message MUST NOT exceed 65536 (65KiB) inculding the single byte for "kind".
 Applications are free to choose how to fragment the file data so long as no single message is bigger than 65536 bytes.
 A good default to choose in 2022 is 16KiB (2^14 - 1 payload bytes)
-XXX: what is a good default? Dilation doesn't give guidance either...
+XXX: _is_ this actually a good default? Dilation doesn't give guidance either...
 
-When sending a `DirectoryOffer` each individual file is preceeded by a `FileOffer` message. However the rules about "maybe wait for reply" no longer exist; that is, all file data SHOULD be immediately sent.
+When sending a `DirectoryOffer` each individual file is preceeded by a `FileOffer` message.
+However the rules about "maybe wait for reply" no longer exist; that is, all file data SHOULD be immediately sent.
+The receiving side MUST NOT sent a reply message (`OfferReject` or `OfferAccept`) in this case.
 
 See examples down below, after "Discussion".
 
@@ -240,7 +274,9 @@ preliminary conclusion: msgpack.
 Sending a single file like `/home/meejah/Documents/Letter.docx` gets a filename like `Letter.docx`
 Sending a whole directory like `/home/meejah/Documents/` would result in a directory-offer with basedir `Documents` and some number of files (possibly with sub-paths).
 
-This does NOT offer a client the chance to select "this" and "that" from a Directory offer (however, see the "Protocol Expansion Execrises" section).
+Discussion point: should the basedir simply be ".", and names relative to it? (That is, "Documents" is a possibly-sensitive local directory name).
+
+This does NOT offer a client the chance to select "this" and "that" from a Directory offer (however, see the "Protocol Expansion Exercises" section).
 
 Preliminary conclusion: centering around "the thing a human would select" (i.e. "a file" or "a directory") makes the most sense.
 
@@ -295,14 +331,20 @@ DirectoryOffer(
 )
 ```
 
+The sending client UX could offer to change the base name to something else.
+The receiving client could choose to "suggest" the name, or simply use it, or anything else deemed appropriate.
+
 
 ## Protocol Expansion Exercises
 
 Here we present several scenarios for different kinds of protocol expansion.
 The point here is to discuss the _kinds_ of expansions that might happen.
-The examples here ARE NOT part of the spec and SHOULD NOT be implemented.
+These examples here ARE NOT part of the spec and SHOULD NOT be implemented.
 
-That said, we believe they're realistic features that _could_ make sense in future protocol expansions.
+That said, we believe they're realistic features that _could_ make sense as future protocol expansions.
+
+Per advice in RFC 9170, it may be good to have 2 or more features present in the "first version" of the protocol to ensure this extension mechanism gets exercised.
+(XXX put "compression" in here? so then there's an optional feature?)
 
 
 ### Thumbnails
@@ -326,6 +368,7 @@ class Offer:
     bytes: int
     thumbnail: bytes  # introduced in "thumbnail" feature; PNG data
 ```
+
 A new peer speaking to an old peer will never see `thumbnail` in the Offers, because the old peer sent `"formats": ["basic"]` so the new peer knows not to inclue that attribute (and the old peer won't ever send it).
 
 Two new peers speaking will both send `"formats": ["basic", "thumbnails"]` and so will both include (and know how to interpret) `"thumbnail"` attributes on `Offers`.
@@ -339,7 +382,7 @@ What if we decide we want to expand the "ask" behavior to sub-items in a Directo
 
 As this affects the behavior of both the sender (who now has to wait more often) and the receiver (who now has to send a new message) this means an overall protocol version bump.
 
-(XXX _does_ it though? I think we could use `"formats"` here too...)
+(XXX _does_ it though? I think we could use `"features"` here too if we wanted...)
 
 So, this means that `"version": 2` would be the newest version.
 Any peer that sends a version lower than this (i.e. existing `1`) will not send any fine-grained information (or "yes" messages).
@@ -366,7 +409,7 @@ It can be useful to send a "list of versions" you support even if the ultimate o
 
 Something to do with being able to release (and then revoke) particular (possibly "experimental") versions.
 
-There may be an example in the TLS history surrounding this.
+There may be an example in the TLS history surrounding this. (`RFC 9170 <https://datatracker.ietf.org/doc/html/rfc9170>`_ discusses this, or at least the concept of "greasing" a protocol's extension points)
 
 This means we might want `"version": [1, 2]` for example instead of `"version": 1` or `"version": 2` alone.
 

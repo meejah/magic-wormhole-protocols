@@ -108,7 +108,8 @@ class Message:
 ```
 
 All control-channel messages MUST be msgpack-encoded and include at least a `"kind"` field.
-Future version (or extensions) of the protocol may add additional control-channel messages.
+Future extensions to the protocol may add additional control-channel messages (thus, any unknown control-channel messages MUST be ignored).
+To be clear, an unknown control-channel `"kind"` MUST NOT be treated as a protocol error.
 
 
 ### Making an Offer

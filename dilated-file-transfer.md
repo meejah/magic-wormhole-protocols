@@ -36,7 +36,7 @@ Clients supporting newer versions of file-transfer (i.e. the one in this documen
 
 In the core mailbox protocol, applications can indicate version information, via `app_versions`.
 The existing file-transfer protocol doesn't use this feature so the version information is empty (indicating "classic").
-This new Dilated File Transfer protocol will include a dict like:
+This new Dilated File Transfer MUST include version information:
 
 ```json
 {
@@ -65,7 +65,7 @@ The `"features"` key is a list of message-formats / features understood by the p
 This allows for existing messages to be extended, or for new message types to be added.
 Peers MUST _accept_ messages for any features they support.
 Peers MUST only send messages for features in the other side's list.
-Only one format exists currently: `"core0"`.
+Only one feature exists currently: `"core0"` (and it MUST be supported).
 Peers MUST tolerate the existence of unknown values in the `"features"` list.
 
    (XXX might make the Python implementation randomly add an unknown one, 10% of the time?)

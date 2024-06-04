@@ -239,26 +239,6 @@ See examples down below, after "Discussion".
 
 ## Discussion and Open Questions
 
-* Overall versioning considerations
-
-Versioning is hard.
-
-The existing file-transfer protocol does not include versioning.
-Luckily, the mailbox protocol _itself_ allows for "application versioning" messages; this gives us an "out" here, effectively letting us send a "T minus 1" message via the "application version" dict.
-
-We do not have another such escape hatch (i.e. "T minus 2"), so if we get it wrong (again) then we potentially have a painful upgrade path.
-
-Currently, a file-transfer peer that sends zero version data is assumed to be "classic".
-A file-transfer peer supporting Dilation and this new protocol sends `"transfer": {...}` as per the  "Version Negotiation" section above.
-We include a `"version"` key in that dict so that this transfer protocol may be extended in the future (see "Protocol Expansion Exercises" below).
-
-Additionally, a `"features"` key is included in that information.
-Although releated, this is somewhat orthogonal to "versions".
-That is, a peer may _know how to parse_ some (newer) version of this protocol but may still wish to _not_ support (or use) a particular feature.
-
-
-
-
 * file naming
 
 Sending a single file like `/home/meejah/Documents/Letter.docx` gets a filename like `Letter.docx`

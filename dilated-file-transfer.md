@@ -239,18 +239,6 @@ See examples down below, after "Discussion".
 
 ## Discussion and Open Questions
 
-* file naming
-
-Sending a single file like `/home/meejah/Documents/Letter.docx` gets a filename like `Letter.docx`
-Sending a whole directory like `/home/meejah/Documents/` would result in a directory-offer with basedir `Documents` and some number of files (possibly with sub-paths).
-
-Discussion point: should the basedir simply be ".", and names relative to it? (That is, "Documents" is a possibly-sensitive local directory name).
-
-This does NOT offer a client the chance to select "this" and "that" from a Directory offer (however, see the "Protocol Expansion Exercises" section).
-
-Preliminary conclusion: centering around "the thing a human would select" (i.e. "a file" or "a directory") makes the most sense.
-
-
 * streaming data
 
 There is no "finished" message. Maybe there should be? (e.g. the receiving side sends back a hash of the file to confirm it received it properly?)

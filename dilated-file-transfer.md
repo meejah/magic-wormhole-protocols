@@ -274,7 +274,7 @@ Given a hypothetical directory tree:
         * hello.py
 
 As spec'd above, if the human selects `/home/meejah/project/src/hello.py` then it should be sent as `hello.py`.
-However if they select `/home/meejah/project/` then there should be a Directory Offer offers like:
+However if they select `/home/meejah/project/` then there should be a DirectoryOffer that looks like:
 
 ```python
 DirectoryOffer(

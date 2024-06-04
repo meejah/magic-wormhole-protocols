@@ -102,8 +102,8 @@ These messages look like:
 
 ```python
 class Message:
-    message: str     # unicode string
     kind: "text"
+    message: str     # unicode string
 ```
 
 All control-channel messages MUST be msgpack-encoded and include at least a `"kind"` field.
@@ -131,9 +131,9 @@ The following kinds of messages exist (indicated by the first byte):
 * 0x05: file data bytes
 
 All other byte values are reserved for future use and MUST NOT be used.
-XXX: maybe spec [0, 128) as reserved, and [128, 255) for "experiments"?
+(The "features" mechanism can be used to experiment with new sorts of messages, as ultimately a new feature needs to be described in this protocol documnet and that description may specify more "kinds" of message).
 
-The first message sent on the new subchannel is either `FileOffer` or `DirectoryOffer`.
+The first message sent on the new subchannel MUST be either `FileOffer` or `DirectoryOffer`.
 
 To offer a single file (with message kind `1`):
 
@@ -167,7 +167,7 @@ DirectoryOffer(
 
 This indicates an offer to send two files, one in `"project/README"` and the other in `"project/src/hello.py"`.
 A client can consider the "base" name as suggestion, of course.
-On the flip side, a privacy-conscious sending application could offer to randomize the name when sending.
+On the flip side, a privacy-conscious sending application could offer to randomize the name when sending (or at least use something other than the on-filesystem name).
 
 In Haskell, this might look like:
 
@@ -228,12 +228,11 @@ That is, the offering side always initiates the open and close of the correspond
 Messages of kind `5` ("file data bytes") consist solely of file data.
 A single data message MUST NOT exceed 65536 (65KiB) inculding the single byte for "kind".
 Applications are free to choose how to fragment the file data so long as no single message is bigger than 65536 bytes.
-A good default to choose in 2022 is 16KiB (2^14 - 1 payload bytes)
-XXX: _is_ this actually a good default? Dilation doesn't give guidance either...
+A good default to choose in 2024 is 16KiB (2^14 - 1 payload bytes)
 
 When sending a `DirectoryOffer` each individual file is preceeded by a `FileOffer` message.
 However the rules about "maybe wait for reply" no longer exist; that is, all file data SHOULD be immediately sent.
-The receiving side MUST NOT sent a reply message (`OfferReject` or `OfferAccept`) in this case.
+The receiving side MUST NOT send a reply message (`OfferReject` or `OfferAccept`) in this case.
 
 See examples down below, after "Discussion".
 

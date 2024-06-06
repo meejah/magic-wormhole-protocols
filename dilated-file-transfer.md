@@ -34,7 +34,7 @@ For a series of files in a directory (i.e. if a directory was selected to send) 
 There is an existing file-transfer protocol which does not use Dilation (called "classic" in this document).
 Clients supporting newer versions of file-transfer (i.e. the one in this document) SHOULD offer backwards compatibility where possible.
 
-In the core mailbox protocol, applications can indicate version information, via `app_versions`.
+In the core mailbox protocol applications can indicate version information via `app_versions`.
 The existing file-transfer protocol doesn't use this feature so the version information is empty (indicating "classic").
 This new Dilated File Transfer MUST include version information:
 
@@ -63,12 +63,15 @@ If a peer sends no version information at all, it will be using the classic prot
 
 The `"features"` key is a list of message-formats / features understood by the peer.
 This allows for existing messages to be extended, or for new message types to be added.
-Peers MUST _accept_ messages for any features they support.
+Peers MUST _accept_ messages for any features they list.
 Peers MUST only send messages for features in the other side's list.
-Only one feature exists currently: `"core0"` (and it MUST be supported).
 Peers MUST tolerate the existence of unknown values in the `"features"` list.
 
-   (XXX might make the Python implementation randomly add an unknown one, 10% of the time?)
+The following required features MUST be supported: `"core0"`
+
+The following optional features MAY be supported: `"compression"` (see "Feature: Compression (optional)").
+
+(XXX might make the Python implementation randomly add an unknown one, 10% of the time?)
 
 See "Example of Protocol Expansion" below for discussion about adding new attributes or capabilities or evolving existing ones.
 
@@ -129,6 +132,7 @@ The following kinds of messages exist (indicated by the first byte):
 * 0x03: msgpack-encoded `OfferAccept` message
 * 0x04: msgpack-encoded `OfferReejct` message
 * 0x05: file data bytes
+* 0x06: (only with "compression" enabled; see that section)
 
 All other byte values are reserved for future use and MUST NOT be used.
 (The "features" mechanism can be used to experiment with new sorts of messages, as ultimately a new feature needs to be described in this protocol documnet and that description may specify more "kinds" of message).
@@ -237,6 +241,61 @@ The receiving side MUST NOT send a reply message (`OfferReject` or `OfferAccept`
 See examples down below, after "Discussion".
 
 
+## Feature: Compression (optional)
+
+Support for this optional feature is indicated with `"compression"` in the `"features"` list.
+If present, file data MUST all be compressed using ZStandard.
+
+This introduces a new message kind: **``0x06``: compressed file data bytes**.
+Using a new "kind" here helps applications avoid confusion as to what sort of payload is received.
+When both peers list `"compression"` in their `"features"` then there should be no `0x05` (file data bytes) messages only `0x06` ones.
+
+A single Offer, whether it is a FileOffer or a DirectoryOffer MUST use a single "Compression Context" for the entire offer.
+One can think of this as processing all the data from a single subchannel via one compression context.
+Although the DirectoryOffer wire-format uses FileOffers to dilineate different files, a single compression context MUST still be used for the entire DirectoryOffer (i.e. all files in it).
+Note that only file-bytes themselves are compressed and the wire format of protocol messages remains the same whether using `"compression"` or not.
+
+The Python implementation uses the "streaming" mode of zstandard; implementations may make their own choices.
+
+Although it is optional in ZStandard, clients MUST enable the ``write_content_size`` option that populates the decompressed size into the ZStandard header.
+Peers MUST NOT set any "dictionary" information in the compression context.
+Peers MAY choose their own compression-level; if in doubt use the ZStandard default (currently "3").
+Any other ZStandard options SHOULD remain at their default value.
+
+Implementations SHOULD send one "ZStandard Frame" in each message -- however, peers MUST deal with partial frames properly.
+That is, any given `0x06` message is "the next bunch of bytes" and may be zero, one or more entire ZStandard frames.
+There MUST be a ZStandard Frame boundary at the end of each file in a DirectoryOffer.
+
+Here is partial Python code showing how a sending-side might accomplish this (with the [https://python-zstandard.readthedocs.io](python-zstandard) library)::
+
+    class MessageEncapsulator:
+        def __init__(self, subchannel):
+            self.subchannel = subchannel
+
+        def write(self, data):
+            message = b"0x06" + data
+            self.subchannel.send_message(message)
+
+    # dummy values, the application UX would obtain these somehow
+    filesize = 1234
+    fd = open("a-file", "rb")
+
+    # "subchannel" here is some encapsulation of the open subchannel we have
+    # obtained for this Offer, with a "send_message()" member
+    output = MessageEncapsulator(subchannel)
+    with ctx.stream_writer(output, size=filesize, write_size=19*1024) as writer:
+        while True:
+            data = fd.read(16*1024)
+            if data:
+                writer.write(data)
+            else:
+                break
+
+
+XXX: it looks like by default (via zstandard python lib) it targets ~128KiB per "frame", can specify write_size= .. but weirdly it looks like that's basically a "max"? (averaged 14600 bytes with max 16384, min 3 (!!) in a test)
+
+
+
 ## Discussion and Open Questions
 
 * streaming data
@@ -248,14 +307,6 @@ We need _something_ to indicate the next file etc
 
 Do the limits on message size make sense? Should "65KiB" be much smaller, potentially?
 (Given that network conditions etc vary a lot, I think it makes sense for the _spec_ to be somewhat flexible here and "65k" doesn't seem very onerous for most modern devices / computers)
-
-
-* compression
-
-It may make sense to do compression of files.
-See "Protocol Expansion Exercises" for more discussion.
-
-Preliminary conclusion: no compression in this version.
 
 
 ## File Naming Example
@@ -279,7 +330,7 @@ However if they select `/home/meejah/project/` then there should be a DirectoryO
 ```python
 DirectoryOffer(
     base="project",
-    size=4444,
+    size=4444,  # actually sum of all file-sizes
     files=[
         "local-network.dia",
         "traffic.pcap",
@@ -301,13 +352,10 @@ These examples here ARE NOT part of the spec and SHOULD NOT be implemented.
 
 That said, we believe they're realistic features that _could_ make sense as future protocol expansions.
 
-Per advice in RFC 9170, it may be good to have 2 or more features present in the "first version" of the protocol to ensure this extension mechanism gets exercised.
-(XXX put "compression" in here? so then there's an optional feature?)
-
 
 ### Thumbnails
 
-Let us suppose that at some point in the future we decide to add `thumbnail: bytes` to the `Offer` messages.
+Suppose we decide to add `thumbnail: bytes` to the `Offer` messages.
 It is reasonable to imagine that some clients may not make use of this feature at all (e.g. CLI programs) and so work and bandwidth can be saved by not producing and sending them.
 
 This becomes a new `"feature"` in the protocol.
@@ -324,7 +372,7 @@ class Offer:
     filename: str
     timestamp: int
     bytes: int
-    thumbnail: bytes  # introduced in "thumbnail" feature; PNG data
+    thumbnail: bytes  # optional; introduced in "thumbnail" feature; PNG data
 ```
 
 A new peer speaking to an old peer will never see `thumbnail` in the Offers, because the old peer sent `"formats": ["core0"]` so the new peer knows not to inclue that attribute (and the old peer won't ever send it).
@@ -338,40 +386,17 @@ Additionally, a new peer that _doesn't want_ to see `"thumbnail"` data (e.g. it'
 
 What if we decide we want to expand the "ask" behavior to sub-items in a Directory.
 
-As this affects the behavior of both the sender (who now has to wait more often) and the receiver (who now has to send a new message) this means an overall protocol version bump.
+This affects the state-machine / behavior of both the sender (who now has to wait more often) and the receiver (who now has to send a new message).
 
-(XXX _does_ it though? I think we could use `"features"` here too if we wanted...)
+If both sides include a `"fine-grained"` in their `"features"` list, then this mode is enabled.
+Each peer has an unambiguous change to behavior: they now _always_ wait for an answer message between each file when sending a DirectoryOffer -- and the receiving peer _always_ sends an OfferAccept or OfferReject for each file in a DirectoryOffer.
 
-So, this means that `"version": 2` would be the newest version.
-Any peer that sends a version lower than this (i.e. existing `1`) will not send any fine-grained information (or "yes" messages).
-Any peer who sees the other side at a version lower than `2` thus cannot use this behavior and has to prtend to be a version `1` peer.
+A peer wanting an "accept all" option can choose not to bother the _human_ on each file, but MUST still answer on the wire like this.
 
-If both peers send `2` then they can both use the new behavior (still using the overall `"yes"` versus `"ask"` switch that exists now, probably).
+Another way to specify and implement this behavior could be to introduce a FineGrainedDirectoryOffer or similar, which would only be a valid message to send when both sides have `"fine-grained"` enabled.
 
-
-### Compression
-
-Suppose that we decide to introduce compression.
-
-(XXX again, probably just "features"?)
-
-
-### Big Change
-
-What is a sort of change that might actually _require_ us to use the `"version": 2` lever?
-
-
-### How to Represent Overall Version
-
-It can be useful to send a "list of versions" you support even if the ultimate outcome of a "version negotiation" is a single scalar (of "maximum version").
-
-Something to do with being able to release (and then revoke) particular (possibly "experimental") versions.
-
-There may be an example in the TLS history surrounding this. (`RFC 9170 <https://datatracker.ietf.org/doc/html/rfc9170>`_ discusses this, or at least the concept of "greasing" a protocol's extension points)
-
-This means we might want `"version": [1, 2]` for example instead of `"version": 1` or `"version": 2` alone.
-
-XXX expand, find TLS example
+In any case, a newer peer that does understand `"fine-grained"` can always provide compatibility with clients that don't.
+Although wasteful on bandwidth, such a peer could even simulate the user-experience by throwing away the received bytes for files the receiving human doesn't want.
 
 
 ## Example: one-way transfer
@@ -392,7 +417,6 @@ Speaking this protocol, the `desktop` (receive-only CLI) peer sends version info
 ```json
 {
     "transfer": {
-        "version": 1,
         "mode": "receive",
         "features": ["core0"],
         "permission": "yes"
@@ -407,17 +431,17 @@ For each file that Alice drops, the `laptop` peer:
 * immediately starts sending data (via kind=`5` records)
 * closes the subchannel (when all data is sent)
 
-On the `desktop` peer, the program patiently waits for subchannels to open.
+On the `desktop` peer, the program waits for subchannels to open.
 When a subchannel opens, it:
-* reads the first record and finds a `FileOffer` and opens a local file for writing
+* reads the first record and finds a `FileOffer`, opening a local file for writing
 * reads subsequent data records, writing them to the open file
 * notices the subchannel close
-* double-checks that the corrent number of payload bytes were received
-   * XXX: return a checksum ack? (this might be more in line with Waterken principals so the sending side knows to delete state relating to this file ... but arguably with Dilation it "knows" that file made it?)
 * closes the file
 
-When the GUI application finishes (e.g. Alice closes it) the mailbox is closed.
+When the GUI application finishes (e.g. Alice closes it) the Dilation session is ended (and the mailbox is closed) .
 The `desktop` peer notices this and exits.
+
+(XXX no, see "ending a session gracefully" PRs)
 
 
 ## Example: multi-directional transfer session

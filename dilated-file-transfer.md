@@ -47,7 +47,7 @@ This new Dilated File Transfer MUST include version information:
     }
 }
 ```
-
+Peers MUST tolerate the existence of unkown keys in the version and transfer dicts, especially but not limited to in the presence of unknown features.```
 **Rejected idea**: having a `version` number that increases.
 Per RFC 9170, it can be the case that a protocol can "ossify" or lost its flexibility, including when using "highest common version" sorts of negotiation.
 Multiple extension points (e.g. both "version" and "features") can cause confusion; including both was rejected after considering the question, "when would `version` be incremented instead of using a `feature`?"

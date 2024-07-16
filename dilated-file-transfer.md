@@ -127,7 +127,7 @@ The following kinds of messages exist (indicated by the first byte):
 * 0x01: msgpack-encoded `FileOffer` message
 * 0x02: msgpack-encoded `DirectoryOffer` message
 * 0x03: msgpack-encoded `OfferAccept` message
-* 0x04: msgpack-encoded `OfferReejct` message
+* 0x04: msgpack-encoded `OfferReject` message
 * 0x05: file data bytes
 
 All other byte values are reserved for future use and MUST NOT be used.

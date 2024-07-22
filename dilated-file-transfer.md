@@ -186,15 +186,9 @@ data Offer
 ```
 
 
-What happens next depends on the mode of the peer.
-
-If the peer has `"mode": "yes"` then this peer MUST immediately start sending content messages (see below).
-
-If the peer has `"mode": "ask"` then this peer MUST NOT send any more messages and instead await an incoming message.
-
 Note that a UI treatment can still have a list with multiple offers in it; this protocol is spoken per-subchannel so another offer would be on a separate subchannel.
 
-In `"mode": "ask"`, the incoming message MUST be either `OfferAccept` or `OfferReject`.
+The peer MUST answer with either `OfferAccept` or `OfferReject`.
 These are indicated by the kind byte of that message being `3` or `4` (see list above).
 
 ```python

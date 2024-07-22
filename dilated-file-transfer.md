@@ -43,7 +43,6 @@ This new Dilated File Transfer MUST include version information:
     "transfer": {
         "mode": "{send|receive|connect}",
         "features": ["core0"],
-        "permission": "{ask|yes}"
     }
 }
 ```
@@ -74,11 +73,6 @@ The following optional features MAY be supported: `"compression"` (see "Feature:
 (XXX might make the Python implementation randomly add an unknown one, 10% of the time?)
 
 See "Example of Protocol Expansion" below for discussion about adding new attributes or capabilities or evolving existing ones.
-
-The `"permission"` key specifies how to proceed with offers.
-Using mode `ask` tells the sender to pause after transmitting the first metadata message and await an answer from the peer before streaming data.
-Using mode `yes` means the peer will accept all incoming transfers so the sender should not pause after the metadata (and instead immediately start sending data messages).
-This cuts down latency for "one-way" transfers (see "Discussion")
 
 
 ## Protocol Details
@@ -382,14 +376,20 @@ Two new peers speaking will both send `"formats": ["core0", "thumbnails"]` and s
 Additionally, a new peer that _doesn't want_ to see `"thumbnail"` data (e.g. it's a CLI client) can simply not include `"thumbnail"` in their `"formats"` list even if their protocol implementation knows about it.
 
 
-### Finer Grained Permissions
+### Per-Offer Permissions
 
-What if we decide we want to expand the "ask" behavior to sub-items in a Directory.
+It may be more efficient to have a mode that doesn't bother with the extra round-trip per offer for asking permission.
+
+If that proved to be a useful feature, how can we add it?
+(NB: an early draft of this protocol included this behavior, but it was decided to leave it as a possible future enhancement for simplicity)
 
 This affects the state-machine / behavior of both the sender (who now has to wait more often) and the receiver (who now has to send a new message).
 
-If both sides include a `"fine-grained"` in their `"features"` list, then this mode is enabled.
-Each peer has an unambiguous change to behavior: they now _always_ wait for an answer message between each file when sending a DirectoryOffer -- and the receiving peer _always_ sends an OfferAccept or OfferReject for each file in a DirectoryOffer.
+If both sides include a `"permissions"` in their `"features"` list, then this mode is enabled.
+We could further include a `"fine-grained"` mode too, allowing asking between each and every file in a DirectoryOffer.
+
+Each peer has an unambiguous change to behavior: they now _always_ wait for an answer message between each offer (or between each file for "fine-grained" during a DirectoryOffer).
+The receiving peer _always_ sends an OfferAccept or OfferReject for each file in a DirectoryOffer (in a "fine-grained" mode).
 
 A peer wanting an "accept all" option can choose not to bother the _human_ on each file, but MUST still answer on the wire like this.
 
@@ -418,27 +418,29 @@ Speaking this protocol, the `desktop` (receive-only CLI) peer sends version info
 {
     "transfer": {
         "mode": "receive",
-        "features": ["core0"],
-        "permission": "yes"
+        "features": ["core0"]
     }
 }
 ```
 
-The `laptop` peer then knows to not pause on its subchannels to await permission (`"permission": "yes"`).
+Becase the "permission" mode is not in the default protocol, the software will still have to answer each Offer but will not bother the user (due to the `--yes` option).
+
 For each file that Alice drops, the `laptop` peer:
 * opens a subchannel
 * sends a `FileOffer` / kind=`1` record
-* immediately starts sending data (via kind=`5` records)
+* waits for an answer (OfferAccept) from the `desktop` peer
+* starts sending data (via kind=`5` records)
 * closes the subchannel (when all data is sent)
 
 On the `desktop` peer, the program waits for subchannels to open.
 When a subchannel opens, it:
 * reads the first record and finds a `FileOffer`, opening a local file for writing
+* sends an OfferAccept immediately, without asking the human
 * reads subsequent data records, writing them to the open file
 * notices the subchannel close
 * closes the file
 
-When the GUI application finishes (e.g. Alice closes it) the Dilation session is ended (and the mailbox is closed) .
+When the GUI application finishes (e.g. Alice closes it) the Dilation session is ended (and the mailbox is closed).
 The `desktop` peer notices this and exits.
 
 (XXX no, see "ending a session gracefully" PRs)

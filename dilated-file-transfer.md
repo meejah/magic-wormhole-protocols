@@ -11,14 +11,14 @@ NOTE: there are several open questions / discussion points, some with correspond
 
 ## Overview and Features
 
-Dilated File Transfer is a flexible, session-based approach to file transfer allowing either side to offer files (or groups of file) to send while the other side may accept or reject each offer.
+Dilated File Transfer is a flexible, session-based approach to file transfer allowing either side to offer files (or groups of files) to send while the other side may accept or reject each offer.
 Either side MAY terminate the transfer session (by closing the wormhole)
 Either side MAY select a simpler one-way mode, similar to the classic protocol.
 An extension mechanism allows for future (optional) features.
 
 Files are offered and sent individually, with no dependency on zip or other archive formats.
 
-Metadata is included in the offers to allow the receiver to decide if they want that file before the transfer begins.
+Metadata is included in the offers to allow the receiver to decide if they want that file (or group of files) before the transfer begins.
 
 "Offers" generally correspond to what a user might select; a single-file offer is possible but so is a directory.
 In both cases, they are treated as "an offer" even though a directory may consist of dozens or more individual files.

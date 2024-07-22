@@ -151,6 +151,10 @@ class DirectoryOffer:
 ```
 
 The filenames in the `"files"` list are unicode relative paths (relative to the `"base"` from the `DirectoryOffer` and NOT including that part.
+The `base` name MUST NOT include any path separators (neither forward nor backward slashes).
+The filesnames in `files` MAY include path separators, which MUST always be `/` (even on non-unix systems).
+To be clear: any path separator MUST be a `/`.
+The filenames in `files` MUST NOT include `..`.
 
 For example:
 

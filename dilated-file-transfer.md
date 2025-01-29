@@ -112,9 +112,9 @@ A peer that has chosen mode "receive" MAY send their "done" message right away.
 
 NOTE: if the "Ending a Session Gracefully" proposal (or something similar) lands in the core protocol, that method should instead be preferred for shutdown (see https://github.com/magic-wormhole/magic-wormhole-mailbox-server/issues/31).
 
-All control-channel messages MUST be msgpack-encoded and include at least a `"kind"` field.
-Future extensions to the protocol may add additional control-channel messages (thus, any unknown control-channel messages MUST be ignored).
-To be clear, an unknown control-channel `"kind"` MUST NOT be treated as a protocol error.
+
+
+Future extensions to the protocol may add additional control-channel messages.
 
 
 ### Making an Offer

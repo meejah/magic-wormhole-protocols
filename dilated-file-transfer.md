@@ -120,33 +120,39 @@ For this protocol, each record on the subchannel uses the first byte to indicate
 
 The following kinds of messages exist (indicated by the first byte):
 * 0x00: reserved / unused
-* 0x01: msgpack-encoded `FileOffer` message
-* 0x02: msgpack-encoded `DirectoryOffer` message
-* 0x03: msgpack-encoded `OfferAccept` message
-* 0x04: msgpack-encoded `OfferReject` message
+* 0x01: msgpack-encoded `FileOffer`, `DirectoryOffer`, `OfferAccept` or `OfferReject` message
 * 0x05: file data bytes
 * 0x06: (only with "compression" enabled; see that section)
 
 All other byte values are reserved for future use and MUST NOT be used.
 (The "features" mechanism can be used to experiment with new sorts of messages, as ultimately a new feature needs to be described in this protocol documnet and that description may specify more "kinds" of message).
 
+For all type `0x01` messages, they are `msgpack` encoded as the msgpack type "array".
+The first element of this array MUST be a "string" containing the "kind" of message, one of: `"file-offer"`, `"directory-offer"`, `"offer-accept"`, or `"offer-reject"`.
+The remaining elements of the array depend on the kind of message encountered.
+
 The first message sent on the new subchannel MUST be either `FileOffer` or `DirectoryOffer`.
 
-To offer a single file (with message kind `1`):
+To offer a single file (with message kind `"file-offer"`):
 
 ```python
 class FileOffer:
     filename: str    # unicode relative pathname
-    timestamp: int   # Unix timestamp (seconds since the epoch in GMT)
     bytes: int       # total number of bytes in the file
+
+    def to_bytes(self):
+        return b"0x01" + msgpack.packb(["file-offer", self.filename, self.bytes])
 ```
 
-To offer a directory tree of many files (with message kind `2`):
+To offer a directory tree of many files (with message kind `"directory-offer"`):
 ```python
 class DirectoryOffer:
     base: str          # unicode path segment of the root directory (i.e. what the user selected)
-    size: int         # total number of bytes in _all_ files
+    size: int          # total number of bytes in _all_ files
     files: list[str]   # a list containing relative paths for each file
+
+    def to_bytes(self):
+        return b"0x01" + msgpack.packb(["directory-offer", self.base, self.size, self.files])
 ```
 
 The filenames in the `"files"` list are unicode relative paths (relative to the `"base"` from the `DirectoryOffer` and NOT including that part.
@@ -166,51 +172,48 @@ DirectoryOffer(
 )
 ```
 
-This indicates an offer to send two files, one in `"project/README"` and the other in `"project/src/hello.py"`.
-A client can consider the "base" name as suggestion, of course.
-On the flip side, a privacy-conscious sending application could offer to randomize the name when sending (or at least use something other than the on-filesystem name).
+This is encoded to `msgpack` as the following 40 bytes in "hexdump" format (note that when encoded as a wire message, a single 0x01 octet will preceed this):
 
-In Haskell, this might look like:
-
-```haskell
-import Path (Dir, File, Rel, Path)
-import Data.Time (UTCTime)
-import Numeric.Natural (Natural)
-
-data Offer
-  = FileOffer {
-      fname :: Path Rel File,
-      timestamp :: UTCTime,
-      size :: Natural }
-  | DirectoryOffer{
-      base :: Path Rel Dir,
-      total_size :: Natural,
-      files :: [Path Rel File] }
+```
+00000000  93 af 64 69 72 65 63 74  6f 72 79 2d 6f 66 66 65  |..directory-offe|
+00000010  72 cc a5 92 a6 52 45 41  44 4d 45 ac 73 72 63 2f  |r....README.src/|
+00000020  68 65 6c 6c 6f 2e 70 79                           |hello.py|
+00000028
 ```
 
+If decoded directly back into Python, this will appear as:
+
+```
+['directory-offer', 165, ['README', 'src/hello.py']]
+```
+
+This message indicates an offer to send two files, one in `"project/README"` and the other in `"project/src/hello.py"`.
+A client can consider the "base" name as suggestion, of course.
+On the flip side, a privacy-conscious sending application could offer to randomize the name when sending (or at least use something other than the on-filesystem name).
 
 Note that a UI treatment can still have a list with multiple offers in it; this protocol is spoken per-subchannel so another offer would be on a separate subchannel.
 
 The peer MUST answer with either `OfferAccept` or `OfferReject`.
-These are indicated by the kind byte of that message being `3` or `4` (see list above).
+These are indicated by the "kind" that message being `"offer-accept"` or `"offer-reject"` (see list above).
 
 ```python
 class OfferReject:
     reason: str      # unicode string describing why the offer is rejected
+
+# example in msgpack objects
+# ['offer-reject', 'User rejected.']
 ```
 
-Accept messages are blank (that is, they are a single byte: `4`).
+Accept messages are blank (that is, there are no more elements after the `"offer-reject"` kind).
 
 ```python
 class OfferAccept:
     pass
+
+# example in msgpack objects
+# ['offer-accept']
 ```
 
-Or in Haskell:
-
-```haskell
-data Answer = OfferAccept | OfferReject(Text)
-```
 
 When the offering side gets an `OfferReject` message, the subchannel MUST be immediately closed (by the offering side).
 The offering side SHOULD show the "reason" string to the user.
@@ -220,7 +223,7 @@ When completed, the subchannel is closed.
 
 That is, the offering side always initiates the open and close of the corresponding subchannel.
 
-Messages of kind `5` ("file data bytes") consist solely of file data.
+Messages of kind `0x05` ("file data bytes") consist solely of file data.
 A single data message MUST NOT exceed 65536 (65KiB) inculding the single byte for "kind".
 Applications are free to choose how to fragment the file data so long as no single message is bigger than 65536 bytes.
 A good default to choose in 2024 is 16KiB (2^14 - 1 payload bytes)
@@ -424,15 +427,15 @@ Becase the "permission" mode is not in the default protocol, the software will s
 
 For each file that Alice drops, the `laptop` peer:
 * opens a subchannel
-* sends a `FileOffer` / kind=`1` record
-* waits for an answer (OfferAccept) from the `desktop` peer
-* starts sending data (via kind=`5` records)
+* sends a 0x01 byte plus msgpack-encoded `["file-offer", ...]` record
+* waits for an answer (`["offer-accept"]`) from the `desktop` peer
+* starts sending data (via kind=`0x05` records)
 * closes the subchannel (when all data is sent)
 
 On the `desktop` peer, the program waits for subchannels to open.
 When a subchannel opens, it:
-* reads the first record and finds a `FileOffer`, opening a local file for writing
-* sends an OfferAccept immediately, without asking the human
+* reads the first record and finds a 0x01 byte, msgpack-decodes the rest to `["file-offer", "README", 1200]` indicating a 1200 byte file called "README"
+* sends an 0x01 byte + msgpack-encoded `["offer-accept"]` message immediately, without asking the human
 * reads subsequent data records, writing them to the open file
 * notices the subchannel close
 * closes the file

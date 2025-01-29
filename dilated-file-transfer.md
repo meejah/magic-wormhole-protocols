@@ -119,10 +119,14 @@ Future extensions to the protocol may add additional control-channel messages.
 
 ### Making an Offer
 
-Either side MAY send any number of Offer messages at any time after the connection is set up.
+Either side MAY begin any number of Offers at any time after the connection is set up.
 If the other peer specified `"mode": "send"` then this peer MUST NOT make any offers.
 
-To make an offer the peer opens a subchannel.
+To make an Offer the peer opens a subchannel.
+All communications related to a single Offer use this one subchannel.
+
+As a rough overview, an Offer looks like this: sender opens a subchannel; sends a FileOffer or DirectoryOffer message; awaits a reply; if the reply is Accept, the bytes are transmitted; the subchannel is closed.
+
 Recall from the Dilation specification that subchannels are _record_ pipes (not simple byte-streams).
 That is, a subchannel transmits a series of complete (framed) messages (up to ~4GiB in size).
 
@@ -374,7 +378,6 @@ The thumbnail feature itself could be implemented by expanding the `Offer` messa
 ```python
 class Offer:
     filename: str
-    timestamp: int
     bytes: int
     thumbnail: bytes  # optional; introduced in "thumbnail" feature; PNG data
 ```

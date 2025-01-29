@@ -93,8 +93,14 @@ All control-channel messages contain a "kind" field describing the type of messa
 
 ### Control Channel Messages
 
+All control-channel messages MUST be msgpack-encoded as a list, where the first element is a String indicating the "kind".
+Other elements depend on the kind.
+
+#### Freeform Text Messages
+
 Each side MAY send a free-form text message at any time.
-These messages look like:
+These messages are of kind "message" and include a second string, the message itself.
+For example, in Python objects: `["message", "This is magic!"]` or the following 24 bytes: `92 a7 6d 65 73 73 61 67  65 ae 54 68 69 73 20 69 3 20 6d 61 67 69 63 21` after msgpack encoding.
 
 ```python
 class Message:

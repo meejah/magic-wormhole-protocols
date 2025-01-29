@@ -62,7 +62,7 @@ If a peer sends no version information at all, it will be using the classic prot
 The `"features"` key is a list of message-formats / features understood by the peer.
 This allows for existing messages to be extended, or for new message types to be added.
 Peers MUST _accept_ messages for any features they list.
-Peers MUST only send messages for features in the other side's list.
+Peers MUST only send messages for features that exist in both their own and in the other side's list (that is, the intersection of the two features lists).
 Peers MUST tolerate the existence of unknown values in the `"features"` list.
 
 The following required features MUST be supported: `"core0"`

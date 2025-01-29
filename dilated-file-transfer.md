@@ -16,12 +16,11 @@ Either side MAY terminate the transfer session (by closing the wormhole)
 Either side MAY select a simpler one-way mode, similar to the classic protocol.
 An extension mechanism allows for future (optional) features.
 
-Files are offered and sent individually, with no dependency on zip or other archive formats.
-
 Metadata is included in the offers to allow the receiver to decide if they want that file (or group of files) before the transfer begins.
 
 "Offers" generally correspond to what a user might select; a single-file offer is possible but so is a directory.
 In both cases, they are treated as "an offer" even though a directory may consist of dozens or more individual files.
+For directory offers, files are sent individually without dependencies on archive formats (like zip or tar).
 
 Filenames are relative paths.
 When sending individual files, this will simply be the filename portion (with no leading paths).
@@ -46,9 +45,9 @@ This new Dilated File Transfer MUST include version information:
     }
 }
 ```
-Peers MUST tolerate the existence of unkown keys in the version and transfer dicts, especially but not limited to in the presence of unknown features.```
+Peers MUST tolerate the existence of unknown keys in the version and transfer dicts, especially (but not limited) to the presence of unknown features.```
 **Rejected idea**: having a `version` number that increases.
-Per RFC 9170, it can be the case that a protocol can "ossify" or lost its flexibility, including when using "highest common version" sorts of negotiation.
+Per RFC 9170, it can be the case that a protocol can "ossify" or lose its flexibility, including when using "highest common version" sorts of negotiation.
 Multiple extension points (e.g. both "version" and "features") can cause confusion; including both was rejected after considering the question, "when would `version` be incremented instead of using a `feature`?"
 
 The `mode` key indicates the desired mode of that peer.

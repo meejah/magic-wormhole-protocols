@@ -102,11 +102,15 @@ Each side MAY send a free-form text message at any time.
 These messages are of kind "message" and include a second string, the message itself.
 For example, in Python objects: `["message", "This is magic!"]` or the following 24 bytes: `92 a7 6d 65 73 73 61 67  65 ae 54 68 69 73 20 69 3 20 6d 61 67 69 63 21` after msgpack encoding.
 
-```python
-class Message:
-    kind: "text"
-    message: str     # unicode string
-```
+#### Session Shutdown
+
+Each side MUST send a "done" message at some point (this is of kind "done", and has no additional arguments).
+Once such a message has been sent this side MUST NOT begin any more Offers of its own nor may it send any control-channel messages.
+Once both sides have done this *and* all outstanding Offers have completed (from either/both sides) the session is concluded.
+
+A peer that has chosen mode "receive" MAY send their "done" message right away.
+
+NOTE: if the "Ending a Session Gracefully" proposal (or something similar) lands in the core protocol, that method should instead be preferred for shutdown (see https://github.com/magic-wormhole/magic-wormhole-mailbox-server/issues/31).
 
 All control-channel messages MUST be msgpack-encoded and include at least a `"kind"` field.
 Future extensions to the protocol may add additional control-channel messages (thus, any unknown control-channel messages MUST be ignored).

@@ -127,6 +127,8 @@ To make an Offer the peer opens a subchannel.
 All communications related to a single Offer use this one subchannel.
 
 As a rough overview, an Offer looks like this: sender opens a subchannel; sends a FileOffer or DirectoryOffer message; awaits a reply; if the reply is Accept, the bytes are transmitted; the subchannel is closed.
+In case the reply is Reject, the subchannel is closed (but the Dilation connection and any other subchannels remain active).
+It is the **offering** side which MUST close the connection.
 
 Recall from the Dilation specification that subchannels are _record_ pipes (not simple byte-streams).
 That is, a subchannel transmits a series of complete (framed) messages (up to ~4GiB in size).

@@ -115,6 +115,7 @@ NOTE: if the "Ending a Session Gracefully" proposal (or something similar) lands
 
 
 Future extensions to the protocol may add additional control-channel messages.
+Note that any such addition will also come with a new "feature" flag, so implementations should reject connections sending unknown control-channel messages.
 
 
 ### Making an Offer
@@ -174,6 +175,8 @@ The `base` name MUST NOT include any path separators (neither forward nor backwa
 The filesnames in `files` MAY include path separators, which MUST always be `/` (even on non-unix systems).
 To be clear: any path separator MUST be a `/`.
 The filenames in `files` MUST NOT include `..`.
+
+For clarity: **any** referance to a file outside of ``base`` is a protocol error and MUST cause an immediate rejection of the entire Offer.
 
 For example:
 

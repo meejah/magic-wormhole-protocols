@@ -11,9 +11,10 @@ NOTE: there are several open questions / discussion points, some with correspond
 
 ## Overview and Features
 
-Dilated File Transfer is a flexible, session-based approach to file transfer allowing either side to offer files (or groups of files) to send while the other side may accept or reject each offer.
+Dilated File Transfer is a flexible, session-based approach to file transfer allowing either side to offer files (or groups of files) to send.
+The receiving side may accept or reject each offer.
+Both sides can make and complete one or more ofers, allowing flexible UX.
 Either side MAY terminate the transfer session (by closing the wormhole)
-Either side MAY select a simpler one-way mode, similar to the classic protocol.
 An extension mechanism allows for future (optional) features.
 
 Metadata is included in the offers to allow the receiver to decide if they want that file (or group of files) before the transfer begins.
@@ -113,7 +114,6 @@ A peer that has chosen mode "receive" MAY send their "done" message right away.
 NOTE: if the "Ending a Session Gracefully" proposal (or something similar) lands in the core protocol, that method should instead be preferred for shutdown (see https://github.com/magic-wormhole/magic-wormhole-mailbox-server/issues/31).
 
 
-
 Future extensions to the protocol may add additional control-channel messages.
 Note that any such addition will also come with a new "feature" flag, so implementations should reject connections sending unknown control-channel messages.
 
@@ -124,9 +124,15 @@ Either side MAY begin any number of Offers at any time after the connection is s
 If the other peer specified `"mode": "send"` then this peer MUST NOT make any offers.
 
 To make an Offer the peer opens a subchannel.
-All communications related to a single Offer use this one subchannel.
+All communications related to a single Offer uses this one subchannel.
 
-As a rough overview, an Offer looks like this: sender opens a subchannel; sends a FileOffer or DirectoryOffer message; awaits a reply; if the reply is Accept, the bytes are transmitted; the subchannel is closed.
+As a rough overview, an Offer looks like this:
+* sender opens a subchannel;
+* sends a FileOffer or DirectoryOffer message;
+* awaits a reply;
+* if the reply is Accept, the bytes are transmitted;
+* the subchannel is closed.
+
 In case the reply is Reject, the subchannel is closed (but the Dilation connection and any other subchannels remain active).
 It is the **offering** side which MUST close the connection.
 
@@ -142,7 +148,7 @@ The following kinds of messages exist (indicated by the first byte):
 * 0x06: (only with "compression" enabled; see that section)
 
 All other byte values are reserved for future use and MUST NOT be used.
-(The "features" mechanism can be used to experiment with new sorts of messages, as ultimately a new feature needs to be described in this protocol documnet and that description may specify more "kinds" of message).
+(The "features" mechanism can be used to experiment with new sorts of messages, as ultimately a new feature needs to be described in this protocol document and that description may specify more "kinds" of message).
 
 For all type `0x01` messages, they are `msgpack` encoded as the msgpack type "array".
 The first element of this array MUST be a "string" containing the "kind" of message, one of: `"file-offer"`, `"directory-offer"`, `"offer-accept"`, or `"offer-reject"`.
@@ -174,7 +180,7 @@ class DirectoryOffer:
 
 The filenames in the `"files"` list are unicode relative paths (relative to the `"base"` from the `DirectoryOffer` and NOT including that part.
 The `base` name MUST NOT include any path separators (neither forward nor backward slashes).
-The filesnames in `files` MAY include path separators, which MUST always be `/` (even on non-unix systems).
+The filenames in `files` MAY include path separators, which MUST always be `/` (even on non-unix systems).
 To be clear: any path separator MUST be a `/`.
 The filenames in `files` MUST NOT include `..`.
 
@@ -223,7 +229,7 @@ class OfferReject:
 # ['offer-reject', 'User rejected.']
 ```
 
-Accept messages are blank (that is, there are no more elements after the `"offer-reject"` kind).
+Accept messages are blank (that is, there are no more elements after the `"offer-accept"` kind).
 
 ```python
 class OfferAccept:
@@ -232,7 +238,6 @@ class OfferAccept:
 # example in msgpack objects
 # ['offer-accept']
 ```
-
 
 When the offering side gets an `OfferReject` message, the subchannel MUST be immediately closed (by the offering side).
 The offering side SHOULD show the "reason" string to the user.

@@ -273,14 +273,14 @@ One can think of this as processing all the data from a single subchannel via on
 Although the DirectoryOffer wire-format uses FileOffers to dilineate different files, a single compression context MUST still be used for the entire DirectoryOffer (i.e. all files in it).
 Note that only file-bytes themselves are compressed and the wire format of protocol messages remains the same whether using `"compression"` or not.
 
-The Python implementation uses the "streaming" mode of zstandard; implementations may make their own choices.
+The Python implementation uses the "streaming" mode of zstandard; other implementations may make their own choices.
 
 Although it is optional in ZStandard, clients MUST enable the ``write_content_size`` option that populates the decompressed size into the ZStandard header.
 Peers MUST NOT set any "dictionary" information in the compression context.
 Peers MAY choose their own compression-level; if in doubt use the ZStandard default (currently "3").
 Any other ZStandard options SHOULD remain at their default value.
 
-Implementations SHOULD send one "ZStandard Frame" in each message -- however, peers MUST deal with partial frames properly.
+Implementations SHOULD send one "ZStandard Frame" in each message -- however, peers MUST deal with partial frames properly when reading data.
 That is, any given `0x06` message is "the next bunch of bytes" and may be zero, one or more entire ZStandard frames.
 There MUST be a ZStandard Frame boundary at the end of each file in a DirectoryOffer.
 

@@ -286,6 +286,9 @@ There MUST be a ZStandard Frame boundary at the end of each file in a DirectoryO
 
 Here is partial Python code showing how a sending-side might accomplish this (with the [https://python-zstandard.readthedocs.io](python-zstandard) library)::
 
+    # "subchannel" here is some encapsulation of the open subchannel we have
+    # obtained for this Offer, with a "send_message()" member
+
     class MessageEncapsulator:
         def __init__(self, subchannel):
             self.subchannel = subchannel
@@ -298,8 +301,8 @@ Here is partial Python code showing how a sending-side might accomplish this (wi
     filesize = 1234
     fd = open("a-file", "rb")
 
-    # "subchannel" here is some encapsulation of the open subchannel we have
-    # obtained for this Offer, with a "send_message()" member
+    # compression level 3 is the default; we MUST specifify write_content_size=True though
+    ctx = zstd.ZstdCompressor(level=3, write_content_size=True)
     output = MessageEncapsulator(subchannel)
     with ctx.stream_writer(output, size=filesize, write_size=19*1024) as writer:
         while True:

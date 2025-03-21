@@ -313,21 +313,25 @@ Here is partial Python code showing how a sending-side might accomplish this (wi
                 break
 
 
-XXX: it looks like by default (via zstandard python lib) it targets ~128KiB per "frame", can specify write_size= .. but weirdly it looks like that's basically a "max"? (averaged 14600 bytes with max 16384, min 3 (!!) in a test)
-
-
-
 ## Discussion and Open Questions
 
 * streaming data
 
-There is no "finished" message. Maybe there should be? (e.g. the receiving side sends back a hash of the file to confirm it received it properly?)
+Q: There is no "finished" message. Maybe there should be? (e.g. the
+   receiving side sends back a hash of the file to confirm it received it
+   properly?)
 
-Does "re-using" the `FileOffer` as a kind of "header" when streaming `DirectoryOffer` contents make sense?
-We need _something_ to indicate the next file etc
+Q: Does "re-using" the `FileOffer` as a kind of "header" when
+   streaming `DirectoryOffer` contents make sense?
 
-Do the limits on message size make sense? Should "65KiB" be much smaller, potentially?
-(Given that network conditions etc vary a lot, I think it makes sense for the _spec_ to be somewhat flexible here and "65k" doesn't seem very onerous for most modern devices / computers)
+A: We need _something_ to indicate the next file etc
+
+Q: Do the limits on message size make sense? Should "65KiB" be much smaller, potentially?
+
+A: Given that network conditions etc vary a lot, I think it makes
+   sense for the _spec_ to be somewhat flexible here and "65k" doesn't
+   seem very onerous for most modern devices / computers. This is also
+   the Noise limit so it's not completel arbitrary.
 
 
 ## File Naming Example
@@ -345,7 +349,7 @@ Given a hypothetical directory tree:
       * src/
         * hello.py
 
-As spec'd above, if the human selects `/home/meejah/project/src/hello.py` then it should be sent as `hello.py`.
+As specified above, if the human selects `/home/meejah/project/src/hello.py` then it should be sent as `hello.py`.
 However if they select `/home/meejah/project/` then there should be a DirectoryOffer that looks like:
 
 ```python
@@ -384,7 +388,7 @@ That is, the version information is upgraded to allow `"features": ["core0", "th
 
 Peers that do not understand (or do not _want_) thumbnails do not include that in their `"features"` list.
 So, according to the protocol, these peers should never receive anything related to thumbnails.
-Only if both peers include `"features": ["core0", "thumbnails"]` will they receive thumbnail-related information.
+Only if both peers include `"features": ["thumbnails"]` will they receive thumbnail-related information.
 
 The thumbnail feature itself could be implemented by expanding the `Offer` message:
 
@@ -419,10 +423,28 @@ The receiving peer _always_ sends an OfferAccept or OfferReject for each file in
 
 A peer wanting an "accept all" option can choose not to bother the _human_ on each file, but MUST still answer on the wire like this.
 
-Another way to specify and implement this behavior could be to introduce a FineGrainedDirectoryOffer or similar, which would only be a valid message to send when both sides have `"fine-grained"` enabled.
+Another way to specify and implement this behavior could be to introduce a `FineGrainedDirectoryOffer` or similar, which would only be a valid message to send when both sides have `"fine-grained"` enabled.
 
 In any case, a newer peer that does understand `"fine-grained"` can always provide compatibility with clients that don't.
 Although wasteful on bandwidth, such a peer could even simulate the user-experience by throwing away the received bytes for files the receiving human doesn't want.
+
+An implementation with explicit state-machines would likely choose to implement the most-complicated thing that it supports -- and then, if that feature isn't enabled, it can "skip" that state.
+Most of this feature actually simplifies the state-machine (skipping past any "wait for permission" state).
+However, an implementation cannot simplify the state-machine (because they cannot know whether their peer will support a "do-not-ask" mode as proposed in this section).
+
+## Removing Features
+
+It may be desirable to actually remove features from the protocol.
+As time goes on, features may be added and removed and there may come a time when a particular feature is dropped.
+Implementations may want to simplify their state-machines or other code by removing support for older features.
+
+This is fairly straightforward: they simply no longer advertise suppor for that feature.
+Some care must be taken to propose new changes in cohesive, logical chunks -- that is, several features could be lumped together as a `core1` feature upgrade.
+Doing it this way would make it hard to drop any individual feature.
+
+Another consideration is whether it is a "superset" of existing features.
+If substantial changes are made to the core protocol are made, these may be proposed as `core1` for example.
+One must take care to state which pieces of `core0` are part of `core1` (maybe none, maybe all of them) such that support for `core0` can acutally be dropped at a future time.
 
 
 ## Example: one-way transfer

@@ -124,7 +124,7 @@ Either side MAY begin any number of Offers at any time after the connection is s
 If the other peer specified `"mode": "send"` then this peer MUST NOT make any offers.
 
 To make an Offer the peer opens a subchannel.
-All communications related to a single Offer uses this one subchannel.
+All communications related to a single Offer use this one subchannel.
 
 As a rough overview, an Offer looks like this:
 * sender opens a subchannel;
@@ -133,49 +133,58 @@ As a rough overview, an Offer looks like this:
 * if the reply is Accept, the bytes are transmitted;
 * the subchannel is closed.
 
-In case the reply is Reject, the subchannel is closed (but the Dilation connection and any other subchannels remain active).
+In case the reply is Reject, the subchannel is closed.
 It is the **offering** side which MUST close the connection.
+
+Note that whenever a subchannel closes, the Dilation connection and any other subchannels remain active.
 
 Recall from the Dilation specification that subchannels are _record_ pipes (not simple byte-streams).
 That is, a subchannel transmits a series of complete (framed) messages (up to ~4GiB in size).
 
-For this protocol, each record on the subchannel uses the first byte to indicate the kind of message; the remaining bytes in any message are kind-dependant.
+For this protocol, each record on the subchannl is a complete single `msgpack`-encoded message.
+The single thing in the message MUST be an "array" type, and MUST start with a string indicating the "kind" of message.
+Any remaining elements in the array `kind` -specific.
 
-The following kinds of messages exist (indicated by the first byte):
-* 0x00: reserved / unused
-* 0x01: msgpack-encoded `FileOffer`, `DirectoryOffer`, `OfferAccept` or `OfferReject` message
-* 0x05: file data bytes
-* 0x06: (only with "compression" enabled; see that section)
+The following kinds of messages exist:
+* `"file-offer"`: a single `FileOffer` (other fields follow in the array)
+* `"directory-offer"`: a single `DirectoryOffer` (other fields follow in the array)
+* `"offer-accept"`: an `OfferAccept` message
+* `"offer-reject"`: an `OfferReject` message
+* `"data"`: binary file data, contained in the remaining field
+* `"zdata"`: (only with "compression" enabled; see that section)
 
-All other byte values are reserved for future use and MUST NOT be used.
 (The "features" mechanism can be used to experiment with new sorts of messages, as ultimately a new feature needs to be described in this protocol document and that description may specify more "kinds" of message).
 
-For all type `0x01` messages, they are `msgpack` encoded as the msgpack type "array".
-The first element of this array MUST be a "string" containing the "kind" of message, one of: `"file-offer"`, `"directory-offer"`, `"offer-accept"`, or `"offer-reject"`.
-The remaining elements of the array depend on the kind of message encountered.
+.. NOTE::
+
+   Rejected idea: originally we used the first byte of the message to indicate its "kind", some of which were msgpack-encoded.
+   Testing shows that `msgpack` Python can encode 15 gigabytes per second on a moderate laptop (Core i7 at 1.1Ghz).
+   If future performance-testing indicates that skipping the `msgpack` encoding of "just file bytes" is useful for CPU or memory pressure, a future revision of the protocol could change this decision.
 
 The first message sent on the new subchannel MUST be either `FileOffer` or `DirectoryOffer`.
 
 To offer a single file (with message kind `"file-offer"`):
 
 ```python
+@attrs.frozen
 class FileOffer:
     filename: str    # unicode relative pathname
     bytes: int       # total number of bytes in the file
 
     def to_bytes(self):
-        return b"0x01" + msgpack.packb(["file-offer", self.filename, self.bytes])
+        return msgpack.packb(["file-offer", self.filename, self.bytes])
 ```
 
 To offer a directory tree of many files (with message kind `"directory-offer"`):
 ```python
+@attrs.frozen
 class DirectoryOffer:
     base: str          # unicode path segment of the root directory (i.e. what the user selected)
     size: int          # total number of bytes in _all_ files
     files: list[str]   # a list containing relative paths for each file
 
     def to_bytes(self):
-        return b"0x01" + msgpack.packb(["directory-offer", self.base, self.size, self.files])
+        return msgpack.packb(["directory-offer", self.base, self.size, self.files])
 ```
 
 The filenames in the `"files"` list are unicode relative paths (relative to the `"base"` from the `DirectoryOffer` and NOT including that part.
@@ -197,7 +206,7 @@ DirectoryOffer(
 )
 ```
 
-This is encoded to `msgpack` as the following 40 bytes in "hexdump" format (note that when encoded as a wire message, a single 0x01 octet will preceed this):
+This is encoded to `msgpack` as the following 40 bytes in "hexdump" format:
 
 ```
 00000000  93 af 64 69 72 65 63 74  6f 72 79 2d 6f 66 66 65  |..directory-offe|
@@ -219,24 +228,24 @@ On the flip side, a privacy-conscious sending application could offer to randomi
 Note that a UI treatment can still have a list with multiple offers in it; this protocol is spoken per-subchannel so another offer would be on a separate subchannel.
 
 The peer MUST answer with either `OfferAccept` or `OfferReject`.
-These are indicated by the "kind" that message being `"offer-accept"` or `"offer-reject"` (see list above).
+These are indicated by the "kind" of that message being `"offer-accept"` or `"offer-reject"` (see list above).
 
 ```python
+@attrs.frozen
 class OfferReject:
     reason: str      # unicode string describing why the offer is rejected
 
-# example in msgpack objects
-# ['offer-reject', 'User rejected.']
+    def to_bytes(self):
+        return msgpack.packb(["offer-reject", self.reason])
 ```
 
 Accept messages are blank (that is, there are no more elements after the `"offer-accept"` kind).
 
 ```python
+@attrs.frozen
 class OfferAccept:
-    pass
-
-# example in msgpack objects
-# ['offer-accept']
+    def to_bytes(self):
+        return msgpack.packb(["offer-accept"])
 ```
 
 When the offering side gets an `OfferReject` message, the subchannel MUST be immediately closed (by the offering side).
@@ -247,9 +256,21 @@ When completed, the subchannel is closed.
 
 That is, the offering side always initiates the open and close of the corresponding subchannel.
 
-Messages of kind `0x05` ("file data bytes") consist solely of file data.
-A single data message MUST NOT exceed 65536 (65KiB) inculding the single byte for "kind".
-Applications are free to choose how to fragment the file data so long as no single message is bigger than 65536 bytes.
+Messages of kind `"data"` have a single following field consisting of the binary data.
+Because a single data message MUST NOT exceed 65535 (65KiB) due to Noise Protocol limits.
+This means that the most actual data that may be included in a `Data` message is 65526 bytes.
+Another way to say that is that the `msgpack` encoding of the `"data"` string and length of data is at most 10 bytes.
+
+```
+@attrs.frozen
+class Data:
+    data: bytes
+
+    def to_bytes(self):
+        return msgpack.packb(["data", self.data])
+```
+
+Applications are free to choose how to fragment the file data so long as no single message (after `msgpack` encoding) is bigger than 65535 bytes.
 A good default to choose in 2024 is 16KiB (2^14 - 1 payload bytes)
 
 When sending a `DirectoryOffer` each individual file is preceeded by a `FileOffer` message.

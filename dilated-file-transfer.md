@@ -532,7 +532,7 @@ Whenever Bob clicks "accept" on a file, his client answers with an `OfferAccept`
 If Bob were to click "reject" then his client would answer with an `OfferReject` and Alice's client would close the subchannel.
 XXX what if Bob is bored and clicks "cancel" on a file?
 
-Alice and Bob may exchange severl files at different times in either direction.
+Alice and Bob may exchange several files at different times in either direction.
 As they wrap up the call, Bob close his GUI client which closes the mailbox (and Dilated connection).
 Alice's client sees the mailbox close.
 Alice's GUI tells her that Bob is done and finishes the session; she can no longer drop or add files.
